@@ -2,6 +2,24 @@
 
 #include <algorithm> // std::min / std::max
 
+// The precision to do color-line calculation:
+// Note: final evaluation is always treated as float.
+#ifdef DXT_HIGHP
+typedef double real;
+#else
+typedef float real;
+#endif
+
+// Color line refinement iterations:
+// Minimum is 1
+// Default is 3
+//
+// The maximum really has a lot to do with how much error you'll eventually
+// introduce due to precision of the `real' type used in the color line algorithm.
+//
+// It's suggested you use #define DXT_HIGHP if you want to increase this.
+static constexpr size_t kRefineIterations = 3;
+
 template <typename T>
 static inline T clamp(T current, T min, T max) {
     return std::max(min, std::min(current, max));
@@ -119,11 +137,13 @@ template <size_t C>
 static inline void dxtComputeColorLine(const unsigned char *const uncompressed,
     float (&point)[3], float (&direction)[3])
 {
-    static constexpr float kInv16 = 1.0f / 16.0f;
-
-    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
-    float sumRR = 0.0f, sumGG = 0.0f, sumBB = 0.0f;
-    float sumRG = 0.0f, sumRB = 0.0f, sumGB = 0.0f;
+    static constexpr real kSixteen = real(16.0);
+    static constexpr real kOne = real(1.0);
+    static constexpr real kZero = real(0.0);
+    static constexpr real kInv16 = kOne / kSixteen;
+    real sumR = kZero, sumG = kZero, sumB = kZero;
+    real sumRR = kZero, sumGG = kZero, sumBB = kZero;
+    real sumRG = kZero, sumRB = kZero, sumGB = kZero;
 
     for (size_t i = 0; i < 16*C; i += C) {
         sumR += uncompressed[i+0];
@@ -141,27 +161,27 @@ static inline void dxtComputeColorLine(const unsigned char *const uncompressed,
     sumG *= kInv16;
     sumB *= kInv16;
     // Convert squares to squares of the value minus their average
-    sumRR -= 16.0f * sumR * sumR;
-    sumGG -= 16.0f * sumG * sumG;
-    sumBB -= 16.0f * sumB * sumB;
-    sumRG -= 16.0f * sumR * sumG;
-    sumRB -= 16.0f * sumR * sumB;
-    sumGB -= 16.0f * sumG * sumB;
+    sumRR -= kSixteen * sumR * sumR;
+    sumGG -= kSixteen * sumG * sumG;
+    sumBB -= kSixteen * sumB * sumB;
+    sumRG -= kSixteen * sumR * sumG;
+    sumRB -= kSixteen * sumR * sumB;
+    sumGB -= kSixteen * sumG * sumB;
     // The point on the color line is the average
     point[0] = sumR;
     point[1] = sumG;
     point[2] = sumB;
     // RYGDXT covariance matrix
-    direction[0] = 1.0f;
-    direction[1] = 2.718281828f;
-    direction[2] = 3.141592654f;
-    for (size_t i = 0; i < 3; ++i) {
+    direction[0] = real(1.0);
+    direction[1] = real(2.718281828);
+    direction[2] = real(3.141592654);
+    for (size_t i = 0; i < kRefineIterations; ++i) {
         sumR = direction[0];
         sumG = direction[1];
         sumB = direction[2];
-        direction[0] = sumR*sumRR + sumG*sumRG + sumB*sumRB;
-        direction[1] = sumR*sumRG + sumG*sumGG + sumB*sumGB;
-        direction[2] = sumR*sumRB + sumG*sumGB + sumB*sumBB;
+        direction[0] = float(sumR*sumRR + sumG*sumRG + sumB*sumRB);
+        direction[1] = float(sumR*sumRG + sumG*sumGG + sumB*sumGB);
+        direction[2] = float(sumR*sumRB + sumG*sumGB + sumB*sumBB);
     }
 }
 
